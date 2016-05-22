@@ -1,13 +1,7 @@
-var waitForUserTask = require("./waitForUserTask.js").waitForUserTask;
-var botkit = require('botkit');
-var cron = require('cron');
-var controller = botkit.slackbot();
-var webHookUrl = 'https://hooks.slack.com/services/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';
-
-var bot = controller.spawn({
-	token: "xoxb-43681040471-ohuyBHDQKIO3NLrkg9cOAhj0",
-	//incoming_webhook: {url: webHookUrl}
-});
+var waitingUsers = {};
+var testUsers = [
+	"e.levenetc"
+];
 
 var STATE_IDLE = "idle";
 var STATE_CANDIDATE = "candidate";
@@ -15,30 +9,21 @@ var STATE_ACCEPTED = "accepted";
 var STATE_DECLINED = "declined";
 var STATE_NO_ANSWER = "noAnswer";
 
+var botkit = require('botkit');
+var cron = require('cron');
+var controller = botkit.slackbot();
+
+var bot = controller.spawn({
+	token: "xoxb-43681040471-ohuyBHDQKIO3NLrkg9cOAhj0"
+});
+
 bot.startRTM();
 
 function U(name, id) {
 	this.name = name;
 	this.id = id;
 	this.state = STATE_IDLE;
-	this.messages = [];
-	this.waitingJob = null;
 }
-
-//new CronJob('* * * * * *', function() {
-//  console.log('You will see this message every second');
-//}, null, true, 'America/Los_Angeles');
-
-//var cronJob = cron.job('* * * * * *', function () {
-// perform operation e.g. GET request http.get() etc.
-//console.log('cron job completed');
-//});
-//cronJob.start();
-
-var waitingUsers = {};
-var testUsers = [
-	"e.levenetc"
-];
 
 controller.on('rtm_open', function (bot) {
 
