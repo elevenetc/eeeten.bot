@@ -55,6 +55,15 @@ controller.hears('start', ['direct_message', 'direct_mention', 'mention'], funct
 
 });
 
+controller.hears('status', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
+	var invitationIsInProgress = isInvitationIsInProgress();
+	var listOfChosenUsers = getListOfChosenUsers();
+	bot.reply(message,
+		'Status:\nSearching in progress: ' + invitationIsInProgress +
+		'\n Chosen people: ' + (listOfChosenUsers.length == 0 ? 'no' : listOfChosenUsers)
+	);
+});
+
 controller.hears('echo', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
 	bot.reply(message, 'echo: ok');
 });
@@ -79,7 +88,6 @@ controller.hears('yes', ['direct_message', 'direct_mention', 'mention'], functio
 	logMessageFromUser(message);
 	var userId = message.user;
 	var wasCandidate = false;
-	var replyText = null;
 
 	if (usersMap.hasOwnProperty(userId)) {
 		var user = usersMap[userId];
@@ -89,14 +97,7 @@ controller.hears('yes', ['direct_message', 'direct_mention', 'mention'], functio
 		}
 	}
 
-	if (wasCandidate) {
-		if (isInvitationIsInProgress())
-			replyText = 'Thanks for help! I\'m still searching for other people. I\'ll inform you when I finish.';
-		else
-			replyText = 'Thanks!';
-	}
-
-	if (replyText != null) bot.reply(message, replyText);
+	if (wasCandidate) bot.reply(message, 'Thanks for help!');
 });
 
 controller.hears('no', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
