@@ -1,28 +1,36 @@
-var DEBUG = true;
-
-var waitingUsers = {};
-var testUsers = [
-	"e.levenetc"
-];
-
-var STATE_IDLE = "idle";
-var STATE_CANDIDATE = "candidate";
-var STATE_ACCEPTED = "accepted";
-var STATE_DECLINED = "declined";
-var STATE_NO_ANSWER = "noAnswer";
-
-var botkit = require('botkit');
-var cron = require('cron');
-var controller = botkit.slackbot({debug: DEBUG});
+/**
+ * To run:
+ * env token=<token> node eeeten.bot.js
+ */
 
 if (!process.env.token) {
-	console.log('Error: Specify token in environment');
+	logError('Error: Specify token in environment');
 	process.exit(1);
 }
 
-var bot = controller.spawn({
-	token: process.env.token
-});
+var workingChannel = 'temp-channel';
+var waitingTime = 5000;
+var teamSize = 2;
+var usersMap = {};
+var invitationUsersQueue = [];
+var testUsers = [
+	'e.levenetc'
+];
+var ignoredUsers = [
+	'eeeten.bot',
+	'slackbot'
+];
+
+var STATE_IDLE = 'idle';
+var STATE_CANDIDATE = 'candidate';
+var STATE_ACCEPTED = 'accepted';
+var STATE_DECLINED = 'declined';
+var STATE_NO_ANSWER = 'noAnswer';
+
+var botkit = require('botkit');
+var cron = require('cron');
+var controller = botkit.slackbot({debug: false});
+var bot = controller.spawn({token: process.env.token});
 
 bot.startRTM();
 
@@ -33,93 +41,193 @@ function U(name, id) {
 }
 
 controller.on('rtm_open', function (bot) {
+	//console.log('Bot is connected');
+	startSearchForPeople();
+});
 
-	console.log('Bot is connected');
+controller.hears('start', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
 
+	if (invitationIsInProgress()) {
+		bot.reply(message, 'I\' already searching for people!');
+	} else {
+		bot.reply(message, 'Ok! I\'ve started invitation process.');
+		startSearchForPeople();
+	}
+
+});
+
+controller.hears('yes', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
+	logMessageFromUser(message);
+	var userId = message.user;
+	var wasCandidate = false;
+	var replyText = null;
+
+	if (usersMap.hasOwnProperty(userId)) {
+		var user = usersMap[userId];
+		if (user.state === STATE_CANDIDATE) {
+			user.state = STATE_ACCEPTED;
+			wasCandidate = true;
+		}
+	}
+
+	if (wasCandidate) {
+		if (invitationIsInProgress())
+			replyText = 'Thanks for help! I\'m still searching for other people. I\'ll inform you when I finish.';
+		else
+			replyText = 'Thanks! I already found all people. But you can help.';
+	}
+
+	if (message != null) bot.reply(message, replyText);
+});
+
+controller.hears('no', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
+	logMessageFromUser(message);
+	var userId = message.user;
+	if (usersMap.hasOwnProperty(userId)) {
+
+		var user = usersMap[userId];
+		if (user.state === STATE_CANDIDATE) {
+			user.state = STATE_DECLINED;
+			//console.log('User ' + user.name + ' declined invitation');
+		}
+
+	}
+});
+
+function startSearchForPeople() {
+
+	invitationUsersQueue.length = 0;
+	usersMap = {};
 
 	bot.api.users.list({}, function (err, response) {
 		if (response.hasOwnProperty('members') && response.ok) {
 			var total = response.members.length;
 			for (var i = 0; i < total; i++) {
 				var member = response.members[i];
-				//console.log(member.name);
+
+				if (ignoredUsers.indexOf(member.name) > -1) continue;
+
 				var user = new U(member.name, member.id);
-				startWaitForUser(bot, user);
+				usersMap[member.id] = user;
+				invitationUsersQueue.push(user);
 			}
+
+			randomizeArray(invitationUsersQueue);
+
+			for (var i = 0; i < teamSize; i++) nextUser();
+
+		} else {
+			logError('Unable to load list of users');
 		}
 	});
-});
+}
 
+function nextUser() {
 
-controller.hears('yes', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
-	logMessageFromUser(message);
-	var userId = message.user;
+	if (invitationUsersQueue.length == 0) {
 
-	if (waitingUsers.hasOwnProperty(userId)) {
-		var user = waitingUsers[userId];
-
-		if (user.state === STATE_CANDIDATE) {
-			user.state = STATE_ACCEPTED;
-			console.log("User " + user.name + " accepted invitation");
-		}
-	}
-});
-
-controller.hears('no', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
-	logMessageFromUser(message);
-	var userId = message.user;
-	if (waitingUsers.hasOwnProperty(userId)) {
-
-		var user = waitingUsers[userId];
-		if (user.state === STATE_CANDIDATE) {
-			user.state = STATE_DECLINED;
-			console.log("User " + user.name + " declined invitation");
-		}
-
-	}
-});
-
-function startWaitForUser(bot, user) {
-	if (testUsers.indexOf(user.name) > -1) {
-
-		user.state = STATE_CANDIDATE;
-
-		waitingUsers[user.id] = user;
-
-		sendMessageToUser(user, 'Hello ' + user.name + '!!! Are you ready to help? Say "no" if you\'re busy.');
-
-		setTimeout(function () {
-
-			console.log("Waiting for " + user.name + " finished");
-
-			if (user.state === STATE_CANDIDATE) {
-				user.state = STATE_NO_ANSWER;
-				sendMessageToUser(bot, user, 'Ok, sorry for disturbance. I try to find another person to help.');
+		for (var userId in usersMap) {
+			if (usersMap[userId].state == STATE_CANDIDATE) {
+				return;
 			}
+		}
 
-		}, 5000);
+		var listOfChosenUsers = getListOfChosenUsers();
+		if (listOfChosenUsers.length == 0) {
+			sendMessageTo(workingChannel, 'Nobody wants to help today :(');
+		} else {
+			console.log(listOfChosenUsers.toString());
+			sendMessageTo(workingChannel, 'Today next people help to serve the lunch:' + listOfChosenUsers.toString());
+		}
 
+
+		printUsers(usersMap);
+	} else {
+		var user = invitationUsersQueue.shift();
+		startWaitForUser(user);
 	}
+}
+
+function startWaitForUser(user) {
+
+	user.state = STATE_CANDIDATE;
+
+	sendMessageToUser(user, 'Hello ' + user.name + '!!! Are you ready to help? Say "no" if you\'re busy.');
+
+	setTimeout(function () {
+
+		if (user.state === STATE_CANDIDATE) {
+			user.state = STATE_NO_ANSWER;
+			sendMessageToUser(user, 'Ok, sorry for disturbance. I try to find another person to help.');
+		}
+
+		nextUser();
+
+	}, waitingTime);
 }
 
 function sendMessageToUser(user, text) {
 
-	bot.api.chat.postMessage(
-		{text: text, channel: user.id, as_user: true},
-		function (err, response) {
-			console.log("error:" + err);
-			console.log("resp:" + response);
-		}
-	);
-
-	logMessageToUser(user, text);
+	if (testUsers.length > 0 && testUsers.indexOf(user.name) > -1) sendMessageTo(user.id, text);
+	logMessageToUser(user.name, text);
 }
 
-function logMessageToUser(user, text) {
-	console.log("Message to " + user.name + ": " + text);
+function sendMessageTo(channelId, text) {
+	bot.api.chat.postMessage(
+		{text: text, channel: channelId, as_user: true},
+		function (error, response) {
+			if (error != null)logError(error);
+		}
+	);
+}
+
+/**
+ * Utils
+ */
+
+function logMessageToUser(name, text) {
+	console.log('Message to ' + name + ': ' + text);
 }
 
 function logMessageFromUser(message) {
 	var userId = message.user;
-	console.log("Message from " + userId + ": " + message.text);
+	console.log('Message from ' + userId + ': ' + message.text);
+}
+
+function logError(errorMessage) {
+	console.log('Error: ' + errorMessage);
+}
+
+function randomizeArray(array) {
+	for (var i = array.length - 1; i > 0; i--) {
+		var aIndex = Math.floor(Math.random() * (i + 1));
+		var bIndex = array[i];
+		array[i] = array[aIndex];
+		array[aIndex] = bIndex;
+	}
+	return array;
+}
+
+function printUsers(users) {
+	console.log(users);
+}
+
+function invitationIsInProgress() {
+	for (var userId in usersMap) {
+		if (usersMap[userId].state == STATE_CANDIDATE) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function getListOfChosenUsers() {
+	var result = [];
+	for (var userId in usersMap) {
+		var user = usersMap[userId];
+		if (user.state == STATE_ACCEPTED) {
+			result.push(user.name);
+		}
+	}
+	return result;
 }
