@@ -24,12 +24,7 @@ var controller = botkit.slackbot({debug: false});
 var bot = controller.spawn({token: process.env.token});
 
 bot.startRTM();
-
-function U(name, id) {
-	this.name = name;
-	this.id = id;
-	this.state = STATE_IDLE;
-}
+cron.job(config.cronTime, startSearchForPeople).start();
 
 controller.on('rtm_open', function (bot) {
 	//console.log('Bot is connected');
@@ -126,7 +121,7 @@ function startSearchForPeople() {
 
 				if (config.ignoredUsers.indexOf(member.name) > -1) continue;
 
-				var user = new U(member.name, member.id);
+				var user = new UserModel(member.name, member.id);
 				usersMap[member.id] = user;
 				invitationUsersQueue.push(user);
 			}
@@ -250,4 +245,10 @@ function getListOfChosenUsers() {
 		}
 	}
 	return result;
+}
+
+function UserModel(name, id) {
+	this.name = name;
+	this.id = id;
+	this.state = STATE_IDLE;
 }
