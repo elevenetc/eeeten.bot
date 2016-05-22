@@ -8,18 +8,8 @@ if (!process.env.token) {
 	process.exit(1);
 }
 
-var workingChannel = 'temp-channel';
-var waitingTime = 5000;
-var teamSize = 2;
 var usersMap = {};
 var invitationUsersQueue = [];
-var testUsers = [
-	'e.levenetc'
-];
-var ignoredUsers = [
-	'eeeten.bot',
-	'slackbot'
-];
 
 var STATE_IDLE = 'idle';
 var STATE_CANDIDATE = 'candidate';
@@ -27,6 +17,7 @@ var STATE_ACCEPTED = 'accepted';
 var STATE_DECLINED = 'declined';
 var STATE_NO_ANSWER = 'noAnswer';
 
+var config = require("./config.js");
 var botkit = require('botkit');
 var cron = require('cron');
 var controller = botkit.slackbot({debug: false});
@@ -42,7 +33,6 @@ function U(name, id) {
 
 controller.on('rtm_open', function (bot) {
 	//console.log('Bot is connected');
-	startSearchForPeople();
 });
 
 controller.hears('start', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
@@ -55,7 +45,7 @@ controller.hears('start', ['direct_message', 'direct_mention', 'mention'], funct
 	} else {
 
 		if (listOfChosenUsers.length > 0) {
-			bot.reply(message, 'For today I\'ve already found people: ' + listOfChosenUsers + '\n If you want to find other people send "restart" command.');
+			bot.reply(message, 'For today I\'ve already found people: ' + listOfChosenUsers + '\n If you want to find other people send "reset" command.');
 		} else {
 			bot.reply(message, 'Ok! I\'ve started invitation process.');
 			startSearchForPeople();
@@ -63,6 +53,10 @@ controller.hears('start', ['direct_message', 'direct_mention', 'mention'], funct
 
 	}
 
+});
+
+controller.hears('echo', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
+	bot.reply(message, 'echo: ok');
 });
 
 controller.hears('reset', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
@@ -113,7 +107,6 @@ controller.hears('no', ['direct_message', 'direct_mention', 'mention'], function
 		var user = usersMap[userId];
 		if (user.state === STATE_CANDIDATE) {
 			user.state = STATE_DECLINED;
-			//console.log('User ' + user.name + ' declined invitation');
 		}
 
 	}
@@ -130,7 +123,7 @@ function startSearchForPeople() {
 			for (var i = 0; i < total; i++) {
 				var member = response.members[i];
 
-				if (ignoredUsers.indexOf(member.name) > -1) continue;
+				if (config.ignoredUsers.indexOf(member.name) > -1) continue;
 
 				var user = new U(member.name, member.id);
 				usersMap[member.id] = user;
@@ -139,7 +132,7 @@ function startSearchForPeople() {
 
 			randomizeArray(invitationUsersQueue);
 
-			for (var i = 0; i < teamSize; i++) nextUser();
+			for (var i = 0; i < config.teamSize; i++) nextUser();
 
 		} else {
 			logError('Unable to load list of users');
@@ -159,10 +152,10 @@ function nextUser() {
 
 		var listOfChosenUsers = getListOfChosenUsers();
 		if (listOfChosenUsers.length == 0) {
-			sendMessageTo(workingChannel, 'Nobody wants to help today :(');
+			sendMessageTo(config.workingChannel, 'Nobody wants to help today :(');
 		} else {
 			console.log(listOfChosenUsers.toString());
-			sendMessageTo(workingChannel, 'Today next people help to serve the lunch:' + listOfChosenUsers.toString());
+			sendMessageTo(config.workingChannel, 'Today next people help to serve the lunch:' + listOfChosenUsers.toString());
 		}
 
 
@@ -188,12 +181,13 @@ function startWaitForUser(user) {
 
 		nextUser();
 
-	}, waitingTime);
+	}, config.waitingTime);
 }
 
 function sendMessageToUser(user, text) {
 
-	if (testUsers.length > 0 && testUsers.indexOf(user.name) > -1) sendMessageTo(user.id, text);
+	var isNotTestUser = config.testUsers.length > 0 && config.testUsers.indexOf(user.name) > -1;
+	if (isNotTestUser) sendMessageTo(user.id, text);
 	logMessageToUser(user.name, text);
 }
 
@@ -201,7 +195,7 @@ function sendMessageTo(channelId, text) {
 	bot.api.chat.postMessage(
 		{text: text, channel: channelId, as_user: true},
 		function (error, response) {
-			if (error != null)logError(error);
+			if (error != null) logError(error);
 		}
 	);
 }
