@@ -1,3 +1,5 @@
+var DEBUG = true;
+
 var waitingUsers = {};
 var testUsers = [
 	"e.levenetc"
@@ -11,10 +13,15 @@ var STATE_NO_ANSWER = "noAnswer";
 
 var botkit = require('botkit');
 var cron = require('cron');
-var controller = botkit.slackbot();
+var controller = botkit.slackbot({debug: DEBUG});
+
+if (!process.env.token) {
+	console.log('Error: Specify token in environment');
+	process.exit(1);
+}
 
 var bot = controller.spawn({
-	token: "xoxb-43681040471-ohuyBHDQKIO3NLrkg9cOAhj0"
+	token: process.env.token
 });
 
 bot.startRTM();
@@ -27,6 +34,9 @@ function U(name, id) {
 
 controller.on('rtm_open', function (bot) {
 
+	console.log('Bot is connected');
+
+
 	bot.api.users.list({}, function (err, response) {
 		if (response.hasOwnProperty('members') && response.ok) {
 			var total = response.members.length;
@@ -38,8 +48,6 @@ controller.on('rtm_open', function (bot) {
 			}
 		}
 	});
-
-	console.log('** The RTM api just connected!');
 });
 
 
