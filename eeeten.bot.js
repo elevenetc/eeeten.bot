@@ -47,13 +47,38 @@ controller.on('rtm_open', function (bot) {
 
 controller.hears('start', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
 
-	if (invitationIsInProgress()) {
-		bot.reply(message, 'I\' already searching for people!');
+	var listOfChosenUsers = getListOfChosenUsers();
+	var invitationIsInProgress = isInvitationIsInProgress();
+
+	if (invitationIsInProgress) {
+		bot.reply(message, 'I\'m already searching for people!');
 	} else {
-		bot.reply(message, 'Ok! I\'ve started invitation process.');
-		startSearchForPeople();
+
+		if (listOfChosenUsers.length > 0) {
+			bot.reply(message, 'For today I\'ve already found people: ' + listOfChosenUsers + '\n If you want to find other people send "restart" command.');
+		} else {
+			bot.reply(message, 'Ok! I\'ve started invitation process.');
+			startSearchForPeople();
+		}
+
 	}
 
+});
+
+controller.hears('reset', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
+	var invitationIsInProgress = isInvitationIsInProgress();
+	var listOfChosenUsers = getListOfChosenUsers();
+
+	if (invitationIsInProgress) {
+		bot.reply(message, 'I\'m already searching for people!');
+	} else {
+		if (listOfChosenUsers.length > 0) {
+			bot.reply(message, 'Ok! I\'ve started invitation process.');
+			startSearchForPeople();
+		} else {
+			bot.reply(message, 'No people were chosen today. Send "start" command and I\'ll find people for today.');
+		}
+	}
 });
 
 controller.hears('yes', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
@@ -71,13 +96,13 @@ controller.hears('yes', ['direct_message', 'direct_mention', 'mention'], functio
 	}
 
 	if (wasCandidate) {
-		if (invitationIsInProgress())
+		if (isInvitationIsInProgress())
 			replyText = 'Thanks for help! I\'m still searching for other people. I\'ll inform you when I finish.';
 		else
-			replyText = 'Thanks! I already found all people. But you can help.';
+			replyText = 'Thanks!';
 	}
 
-	if (message != null) bot.reply(message, replyText);
+	if (replyText != null) bot.reply(message, replyText);
 });
 
 controller.hears('no', ['direct_message', 'direct_mention', 'mention'], function (bot, message) {
@@ -212,7 +237,7 @@ function printUsers(users) {
 	console.log(users);
 }
 
-function invitationIsInProgress() {
+function isInvitationIsInProgress() {
 	for (var userId in usersMap) {
 		if (usersMap[userId].state == STATE_CANDIDATE) {
 			return true;
